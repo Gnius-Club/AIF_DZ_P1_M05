@@ -1,843 +1,157 @@
 <!DOCTYPE html>
-<html lang="es" dir="ltr">
+<html lang="es">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
-  <title>Mi Día de Súper Poder: Aventura de Balance</title>
-  <!-- 
-    ✨ Juego SPA en un solo archivo (HTML + CSS + JS)
-    Tema: Ciudadanía Digital — Equilibrar juego físico y pantallas
-    Autor: Gnius Club / @cris — 2025
-
-    Secciones del código (busca estos anchors):
-      [CONST] Parámetros de balance
-      [HTML] Estructura base y HUD
-      [CSS] Estilos y responsive
-      [JS/INIT] Estado global, guardado y utilidades
-      [JS/INPUT] Teclado + Joystick virtual
-      [JS/LOOP] Bucle principal y render
-      [JS/UI] Barras, HUD, modales, voz y sonido
-      [JS/WORLD] Zonas, POIs y transición
-      [JS/MINIGAMES] Tablet, Dado familiar, Pelota, Amigos
-      [JS/END] Fin de día, resumen y progresión
-      [JS/DEBUG] Panel debug (tecla D)
-
-    Accesibilidad:
-      - Texto grande y alto contraste
-      - Narración SpeechSynthesis (opcional)
-      - Sonidos WebAudio con alternativas visuales
-      - Controles por teclado y joystick
-      - Focus visible y roles ARIA
-  -->
-  <style>
-    :root{
-      /* Colores base alto contraste */
-      --bg:#0b1020; --panel:#121a33; --panel-2:#17224a; --ink:#ffffff;
-      --accent:#00c2ff; --good:#4ade80; --warn:#f59e0b; --bad:#ef4444; --pink:#ff5ea8;
-      --heart:#ff4d6d; --bolt:#ffd166; --fun:#a78bfa; --gold:#fcd34d;
-      --shadow: 0 6px 16px rgba(0,0,0,.35);
-      --radius:16px;
-      --speed:1; /* factor global animaciones */
-    }
-    html,body{height:100%;}
-    body{
-      margin:0; background:linear-gradient(180deg,#0b1020,#0b1020 40%,#0a0d1a);
-      color:var(--ink); font: 600 16px/1.35 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial;
-      letter-spacing:.2px; overflow:hidden;
-    }
-    *{box-sizing:border-box}
-    button{font: inherit}
-
-    /* Layout principal */
-    #game{position:relative; width:100vw; height:100vh; display:grid; grid-template-rows:auto 1fr auto;}
-
-    /* HUD superior */
-    header#hud{
-      display:flex; gap:12px; align-items:center; justify-content:space-between;
-      padding:10px clamp(8px,2vw,20px); background:linear-gradient(180deg,#0b1020b0,#0b102000);
-    }
-    .meters{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
-    .meter{position:relative; display:flex; align-items:center; gap:8px; background:var(--panel); padding:8px 10px; border-radius:var(--radius); box-shadow:var(--shadow); min-width:210px;}
-    .meter .icon{font-size:20px; filter:drop-shadow(0 2px 0 rgba(0,0,0,.15));}
-    .bar{position:relative; width:160px; height:14px; background:#0a1024; border-radius:999px; overflow:hidden; outline:2px solid #1f2b57}
-    .bar > i{position:absolute; inset:0; transform-origin:left center; background:linear-gradient(90deg,var(--good),#22c55e,#16a34a);}
-    .bar.heart > i{background:linear-gradient(90deg,#ff7a8a,var(--heart),#c81e58)}
-    .bar.energy > i{background:linear-gradient(90deg,#ffd166,#ffb703,#ff8800)}
-    .bar.fun > i{background:linear-gradient(90deg,#a78bfa,#8b5cf6,#7c3aed)}
-    .bar.flash{animation: flash 0.6s ease-out 0s 1}
-    @keyframes flash{0%{filter:brightness(1.6)} 100%{filter:brightness(1)}}
-    .bar.red{box-shadow:0 0 0 3px var(--bad) inset; animation:blink 1s steps(2,end) infinite}
-    @keyframes blink{50%{filter:brightness(1.25)} 100%{filter:brightness(1)}}
-
-    /* Reloj día-noche */
-    .clock{display:flex; align-items:center; gap:8px; background:var(--panel-2); padding:8px 10px; border-radius:var(--radius); box-shadow:var(--shadow)}
-    .clock .track{width:180px; height:10px; background:#0a1024; border-radius:999px; position:relative; overflow:hidden}
-    .clock .sun{position:absolute; top:-6px; width:22px; height:22px; border-radius:50%; background:radial-gradient(circle,#ffe08a,#ffb703); box-shadow:0 0 12px #ffb703; left:0}
-
-    /* Botonera */
-    .actions{display:flex; gap:8px; flex-wrap:wrap}
-    .btn{cursor:pointer; border:0; padding:10px 12px; border-radius:12px; background:var(--panel-2); color:var(--ink); box-shadow:var(--shadow)}
-    .btn:focus-visible{outline:3px solid var(--accent)}
-
-    /* Área de juego (mundo) */
-    #worldWrap{position:relative; margin:0 auto; width:100%; height:100%; max-width:1200px;}
-    #world{position:absolute; inset:0; border-radius:20px; overflow:hidden; background:linear-gradient(180deg,#0e1530,#0b1020);}
-
-    /* Capas parallax sencillas por zona */
-    .zone{position:absolute; inset:0; display:none;}
-    .zone.active{display:block}
-    .parallax{position:absolute; inset:0; pointer-events:none;}
-    .floor{position:absolute; left:0; right:0; bottom:0; height:40%; background:linear-gradient(180deg,#0e1a3b,#0e1a3b 40%,#0b1020)}
-
-    /* POIs */
-    .poi{position:absolute; width:56px; height:56px; border-radius:12px; background:#1f2b57; border:2px dashed #5a74ff; display:flex; align-items:center; justify-content:center; filter:drop-shadow(0 6px 10px rgba(0,0,0,.35)); transition:transform .15s}
-    .poi:hover{transform:scale(1.05)}
-    .poi .hint{position:absolute; top:-24px; font-size:12px; background:#111a39; padding:2px 6px; border-radius:8px; opacity:.9}
-    .poi.highlight{box-shadow:0 0 16px 4px #5a74ff66}
-
-    /* Avatar */
-    #avatar{position:absolute; width:52px; height:64px; background:conic-gradient(#4ade80 0 25%, #06b6d4 0 50%, #22c55e 0 75%, #0ea5e9 0); border-radius:14px; transform:translate(-50%,-50%); display:flex; align-items:flex-end; justify-content:center; box-shadow:0 10px 18px rgba(0,0,0,.4)}
-    #avatar:after{content:""; position:absolute; bottom:-6px; width:46px; height:8px; background:radial-gradient(ellipse,#0008,#0000 60%); border-radius:50%}
-
-    /* Aura de victoria */
-    .aura{position:absolute; inset:-10px; border-radius:16px; border:3px solid var(--gold); box-shadow:0 0 16px 6px #ffd84a66; animation: glow 1.4s ease-in-out infinite}
-    @keyframes glow{50%{filter:brightness(1.4)} 100%{filter:brightness(1)}}
-
-    /* JoyStick virtual */
-    #stick{position:absolute; left:12px; bottom:12px; width:120px; height:120px; border-radius:50%; background:#111733aa; backdrop-filter: blur(6px); border:2px solid #22306a; display:flex; align-items:center; justify-content:center; touch-action:none}
-    #stick .knob{width:64px; height:64px; border-radius:50%; background:#2a3a82; border:2px solid #5a74ff; box-shadow:inset 0 0 10px #000a}
-
-    /* Modales (onboarding, minijuegos, resumen) */
-    .modal{position:absolute; inset:0; display:none; align-items:center; justify-content:center; background:rgba(4,8,20,.6)}
-    .modal.show{display:flex}
-    .card{width:min(720px,92vw); background:linear-gradient(180deg,#101a3b,#0d1530); border:1px solid #233067; border-radius:20px; padding:18px; box-shadow:var(--shadow)}
-    .card h2{margin:.2rem 0 0.6rem; font-size:clamp(20px,2.6vw,28px)}
-    .card p{margin:.4rem 0; font-size:clamp(14px,1.8vw,18px)}
-
-    .grid{display:grid; gap:10px; grid-template-columns:repeat(4,1fr)}
-
-    /* Minijuegos */
-    .mini{display:none}
-    .mini.active{display:block}
-
-    /* Tablet (puzzle memoria simple) */
-    .memory{display:grid; grid-template-columns:repeat(4,1fr); gap:8px}
-    .tile{aspect-ratio:1/1; border-radius:12px; background:#1b2550; border:2px solid #2b3b8a; display:flex; align-items:center; justify-content:center; font-size:28px; cursor:pointer; user-select:none}
-    .tile.revealed{background:#26357a}
-    .tile.matched{background:#1f8a6b; border-color:#28c08f}
-
-    /* Dado familiar */
-    .dice-area{display:flex; align-items:center; gap:16px; justify-content:center}
-    .dice{width:64px; height:64px; display:grid; place-items:center; border-radius:16px; background:#132152; font-size:26px; border:2px solid #2440a2}
-
-    /* Pelota (timing) */
-    .timing{display:grid; gap:12px}
-    .bar-timing{height:18px; border-radius:999px; background:#152055; position:relative; overflow:hidden}
-    .cursor{position:absolute; top:0; width:14px; height:18px; background:#fff; left:0}
-    .sweet{position:absolute; inset:0; margin:0 34%; background:#22c55e44}
-
-    /* Amigos (alternado teclas) */
-    .coop{display:flex; flex-direction:column; gap:10px}
-    .coop .pads{display:flex; gap:10px; justify-content:center}
-    .pad{flex:1; min-width:120px; padding:14px; text-align:center; border-radius:12px; background:#1b2550; border:2px solid #2b3b8a; cursor:pointer}
-
-    /* Créditos/Controles */
-    .small{font-size:12px; opacity:.8}
-
-    /* Resumen */
-    .summary{display:grid; gap:10px}
-
-    /* Responsivo básico */
-    @media (max-width:900px){
-      .bar{width:130px}
-      #stick{width:110px; height:110px}
-      #stick .knob{width:58px; height:58px}
-    }
-    @media (max-width:640px){
-      header#hud{gap:6px}
-      .bar{width:110px}
-      .actions{gap:6px}
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mi Día de Súper Poder: Aventura de Balance (Versión Definitiva)</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div id="game" role="application" aria-label="Mi Día de Súper Poder: Aventura de Balance">
-
-    <!-- HUD Superior: medidores + reloj + acciones -->
-    <header id="hud">
-      <div class="meters" aria-live="polite">
-        <div class="meter" id="mEnergy" title="Energía Física">
-          <span class="icon" aria-hidden>⚡</span>
-          <div class="bar energy" aria-label="Energía Física" role="progressbar" aria-valuemin="0" aria-valuemax="100"><i style="transform:scaleX(.8)"></i></div>
-        </div>
-        <div class="meter" id="mHeart" title="Conexión Social">
-          <span class="icon" aria-hidden>❤️</span>
-          <div class="bar heart" aria-label="Conexión Social" role="progressbar" aria-valuemin="0" aria-valuemax="100"><i style="transform:scaleX(.8)"></i></div>
-        </div>
-        <div class="meter" id="mFun" title="Diversión Mental">
-          <span class="icon" aria-hidden>🧠</span>
-          <div class="bar fun" aria-label="Diversión Mental" role="progressbar" aria-valuemin="0" aria-valuemax="100"><i style="transform:scaleX(.1)"></i></div>
-        </div>
-        <div class="clock" id="clock" title="Ciclo Día–Noche">
-          <span>☀️</span>
-          <div class="track"><div class="sun" aria-hidden></div></div>
-          <span>🌙</span>
-        </div>
-      </div>
-      <div class="actions">
-        <button class="btn" id="btnPause" aria-pressed="false">⏸️ Pausa</button>
-        <button class="btn" id="btnRestart">🔄 Reiniciar Día</button>
-        <button class="btn" id="btnMute">🔊 Sonido</button>
-        <button class="btn" id="btnReduce">✨ Efectos: ON</button>
-        <button class="btn" id="btnCredits">ℹ️ Créditos / Controles</button>
-      </div>
-    </header>
-
-    <!-- Mundo -->
-    <main id="worldWrap">
-      <div id="world">
-        <!-- Avatar -->
-        <div id="avatar" style="left:50%; top:70%">
-          <div class="aura" hidden></div>
-        </div>
-
-        <!-- Zonas -->
-        <section class="zone active" id="zone-room" aria-label="Tu Cuarto">
-          <div class="parallax" style="background:linear-gradient(180deg,#16214e,#0e1430)"></div>
-          <div class="floor"></div>
-          <div class="poi" id="poi-tablet" style="left:72%; top:58%" tabindex="0" role="button" aria-label="Tablet en tu cuarto">
-            <span>📱</span>
-            <span class="hint">Tablet</span>
-          </div>
-          <div class="poi" id="poi-decor" style="left:18%; top:56%" tabindex="0" role="button" aria-label="Decorar cuarto">
-            <span>🎨</span>
-            <span class="hint">Decoración</span>
-          </div>
-        </section>
-
-        <section class="zone" id="zone-living" aria-label="La Sala">
-          <div class="parallax" style="background:linear-gradient(180deg,#1a245c,#0e1430)"></div>
-          <div class="floor"></div>
-          <div class="poi" id="poi-boardgame" style="left:50%; top:54%" tabindex="0" role="button" aria-label="Juego de mesa con familia">
-            <span>🎲</span>
-            <span class="hint">Juego Mesa</span>
-          </div>
-          <div class="poi" id="npc-family" style="left:64%; top:58%" aria-hidden="true">
-            <span>👨‍👩‍👧</span>
-            <span class="hint">Familia</span>
-          </div>
-        </section>
-
-        <section class="zone" id="zone-garden" aria-label="El Jardín">
-          <div class="parallax" style="background:linear-gradient(180deg,#0f2a38,#0a1629)"></div>
-          <div class="floor"></div>
-          <div class="poi" id="poi-ball" style="left:34%; top:52%" tabindex="0" role="button" aria-label="Pelota en el jardín">
-            <span>⚽</span>
-            <span class="hint">Pelota</span>
-          </div>
-          <div class="poi" id="poi-friends" style="left:70%; top:52%" tabindex="0" role="button" aria-label="Amigos jugando">
-            <span>🧒🧒</span>
-            <span class="hint">Amigos</span>
-          </div>
-        </section>
-
-        <!-- Joystick -->
-        <div id="stick" aria-label="Joystick virtual" role="group">
-          <div class="knob"></div>
-        </div>
-
-        <!-- Modales generales -->
-        <div class="modal" id="modalOnboarding" role="dialog" aria-modal="true">
-          <div class="card">
-            <h2>🤖 Guía del Balance</h2>
-            <p>⚡ Energía Física: <em>Se llena con movimiento y aire fresco…</em></p>
-            <p>❤️ Conexión Social: <em>Se llena cuando compartes y ríes en persona…</em></p>
-            <p>🎯 Misión: Explora casa y jardín y mantén ambos medidores en verde antes de que se ponga el sol.</p>
-            <div style="display:flex; gap:10px; justify-content:flex-end">
-              <button class="btn" id="btnOk">¡Entendido!</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Minijuegos (contenedor común) -->
-        <div class="modal" id="modalMini" role="dialog" aria-modal="true">
-          <div class="card">
-            <h2 id="miniTitle">Minijuego</h2>
-            <div id="miniContainer">
-              <!-- Tablet: memoria -->
-              <section class="mini" id="mini-tablet">
-                <p>Empareja iconos antes de que termine el tiempo. ¡Sube tu 🧠 Diversión Mental! ⏱️ <b><span id="memotime">20</span>s</b></p>
-                <div class="memory" id="memoryGrid"></div>
-              </section>
-              <!-- Dado familiar -->
-              <section class="mini" id="mini-board">
-                <p>Lanza el dado. Si sale <b>4 o más</b> ganas una <b>ráfaga de ❤️</b>.</p>
-                <div class="dice-area">
-                  <div class="dice" id="dice">—</div>
-                  <button class="btn" id="btnRoll">Lanzar 🎲</button>
+    <!-- HUD Principal - Siempre visible -->
+    <div id="hud" class="hud">
+        <!-- Medidores principales -->
+        <div class="meters-container">
+            <div class="meter">
+                <span class="meter-icon">⚡</span>
+                <div class="meter-bar">
+                    <div id="energy-fill" class="meter-fill energy-fill"></div>
                 </div>
-              </section>
-              <!-- Pelota timing -->
-              <section class="mini" id="mini-ball">
-                <p>Haz tap/clic cuando el cursor esté en la zona verde para patear con fuerza y cargar ⚡.</p>
-                <div class="timing">
-                  <div class="bar-timing" id="timingBar"><div class="sweet"></div><div class="cursor" id="timingCursor"></div></div>
-                  <button class="btn" id="btnKick">¡Patear!</button>
+                <span class="meter-label">Energía Física</span>
+                <span id="energy-value" class="meter-value">100%</span>
+            </div>
+            
+            <div class="meter">
+                <span class="meter-icon">❤️</span>
+                <div class="meter-bar">
+                    <div id="social-fill" class="meter-fill social-fill"></div>
                 </div>
-              </section>
-              <!-- Amigos alternado -->
-              <section class="mini" id="mini-friends">
-                <p>¡Coopera! Presiona alternadamente <b>A</b> y <b>L</b> (o toca los botones) para sumar puntos. ⚡ y ❤️ suben juntos.</p>
-                <div class="coop">
-                  <div class="pads"><button class="pad" id="padA">A</button><button class="pad" id="padL">L</button></div>
-                  <div>Progreso: <span id="coopScore">0</span> / 20</div>
+                <span class="meter-label">Conexión Social</span>
+                <span id="social-value" class="meter-value">100%</span>
+            </div>
+            
+            <div class="meter secondary">
+                <span class="meter-icon">🧠</span>
+                <div class="meter-bar">
+                    <div id="mental-fill" class="meter-fill mental-fill"></div>
                 </div>
-              </section>
+                <span class="meter-label">Diversión Mental</span>
+                <span id="mental-value" class="meter-value">0%</span>
             </div>
-            <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:12px">
-              <button class="btn" id="btnCloseMini">Cerrar</button>
-            </div>
-          </div>
         </div>
 
-        <!-- Créditos / Controles -->
-        <div class="modal" id="modalCredits" role="dialog" aria-modal="true">
-          <div class="card">
-            <h2>Créditos & Controles</h2>
-            <p>Proyecto educativo: <b>Mi Día de Súper Poder</b> — Ciudadanía Digital (Gnius Club).</p>
-            <ul>
-              <li>Movimiento: <b>WASD / Flechas</b> o <b>Joystick</b>.</li>
-              <li>Interactuar: <b>Click/Toque</b> sobre puntos brillantes.</li>
-              <li>Pausa: <b>P</b> — Debug: <b>D</b>.</li>
-            </ul>
-            <p class="small">Voz: SpeechSynthesis. Sonidos: WebAudio (sintéticos). No se recolectan datos personales. Mejor resultado y personalización guardados en tu navegador (localStorage).</p>
-            <div style="display:flex; gap:10px; justify-content:flex-end">
-              <button class="btn" id="btnCloseCredits">Cerrar</button>
+        <!-- Reloj día-noche -->
+        <div class="day-cycle">
+            <div class="day-cycle-container">
+                <div id="day-progress" class="day-progress"></div>
+                <span class="day-icon" id="day-icon">☀️</span>
             </div>
-          </div>
+            <span class="day-label">Progreso del Día</span>
         </div>
 
-        <!-- Resumen / Fin de día -->
-        <div class="modal" id="modalEnd" role="dialog" aria-modal="true">
-          <div class="card summary">
-            <h2>Resumen del Día</h2>
-            <p id="endMsg">Día completado.</p>
-            <p id="endStats"></p>
-            <p id="endTip" class="small"></p>
-            <div style="display:flex; gap:10px; justify-content:flex-end">
-              <button class="btn" id="btnRetry">Reintentar</button>
-              <button class="btn" id="btnContinue">Seguir</button>
-            </div>
-          </div>
+        <!-- Botones de control -->
+        <div class="control-buttons">
+            <button id="pause-btn" class="btn btn--secondary control-btn" title="Pausar/Continuar">⏸️</button>
+            <button id="restart-btn" class="btn btn--secondary control-btn" title="Reiniciar Día">🔄</button>
+            <button id="sound-btn" class="btn btn--secondary control-btn" title="Silenciar Sonido">🔊</button>
+            <button id="help-btn" class="btn btn--secondary control-btn" title="Ayuda">❓</button>
         </div>
+    </div>
 
-      </div>
-    </main>
+    <!-- NUEVO: Botón de Proximidad para Jugar -->
+    <div id="play-button" class="play-button hidden">
+        🎮 Jugar
+    </div>
 
-  </div>
+    <!-- Área principal del juego -->
+    <div id="game-area" class="game-area">
+        <!-- Canvas del juego -->
+        <canvas id="game-canvas" width="800" height="600"></canvas>
+        
+        <!-- NUEVA: Cruceta digital en esquina inferior izquierda -->
+        <div id="dpad" class="dpad">
+            <button id="dpad-up" class="dpad-btn dpad-up">⬆️</button>
+            <button id="dpad-down" class="dpad-btn dpad-down">⬇️</button>
+            <button id="dpad-left" class="dpad-btn dpad-left">⬅️</button>
+            <button id="dpad-right" class="dpad-btn dpad-right">➡️</button>
+        </div>
+    </div>
 
-  <script>
-  "use strict";
-  // =============================
-  // [CONST] Parámetros de balance
-  // =============================
-  const CONST = {
-    // Decaimientos/Ganancias por segundo (ajustables)
-    DECAY_HEART_TABLET: 0.015, // ❤️ baja por uso tablet
-    DECAY_ENERGY_TABLET: 0.03, // ⚡ baja por uso tablet
-    GAIN_HEART_BOARDGAME: 0.05,
-    GAIN_ENERGY_BALL: 0.06,
-    GAIN_BOTH_FRIENDS: 0.07,
-    // Umbrales
-    GREEN_THR: 0.70,
-    RED_THR: 0.30,
-    // Duración del día (segundos)
-    DAY_SECONDS: 150,
-    // Movimiento
-    SPEED_BASE: 180, // px/s
-    SPEED_LOW_MULT: 0.6, // penalización si ⚡ < 30%
-    // Otros
-    FUN_GAIN_TABLET: 0.20, // ganancia de diversión al completar puzzle
-    EFFECTS_ENABLED_DEFAULT: true,
-  };
+    <!-- Modal de tutorial dinámico -->
+    <div id="tutorial-modal" class="modal">
+        <div class="modal-content tutorial-content">
+            <div class="guide-character">🤖</div>
+            <h2 id="tutorial-title">¡Hola! Soy el Guía del Balance</h2>
+            <p id="tutorial-text">Te voy a enseñar cómo mantener un día equilibrado y divertido.</p>
+            <div class="tutorial-progress">
+                <div id="tutorial-progress-bar" class="tutorial-progress-bar"></div>
+                <span id="tutorial-step">Paso 1 de 8</span>
+            </div>
+            <div class="tutorial-buttons">
+                <button id="tutorial-skip" class="btn btn--secondary">Saltar Tutorial</button>
+                <button id="tutorial-next" class="btn btn--primary">Siguiente</button>
+                <button id="tutorial-start" class="btn btn--primary hidden">¡Comenzar!</button>
+            </div>
+        </div>
+    </div>
 
-  // =============================
-  // [HTML] Referencias DOM
-  // =============================
-  const qs = s=>document.querySelector(s);
-  const qsa = s=>[...document.querySelectorAll(s)];
-  const hudEnergy = qs('#mEnergy .bar i');
-  const hudHeart = qs('#mHeart .bar i');
-  const hudFun = qs('#mFun .bar i');
-  const barEnergy = qs('#mEnergy .bar');
-  const barHeart = qs('#mHeart .bar');
-  const funBar = qs('#mFun .bar');
-  const sun = qs('.clock .sun');
-  const btnPause = qs('#btnPause');
-  const btnRestart = qs('#btnRestart');
-  const btnMute = qs('#btnMute');
-  const btnReduce = qs('#btnReduce');
-  const btnCredits = qs('#btnCredits');
-  const modalCredits = qs('#modalCredits');
-  const btnCloseCredits = qs('#btnCloseCredits');
-  const avatar = qs('#avatar');
-  const aura = qs('#avatar .aura');
-  const zones = {room: qs('#zone-room'), living: qs('#zone-living'), garden: qs('#zone-garden')};
-  const stick = qs('#stick');
-  const knob = qs('#stick .knob');
-  const modalOnboarding = qs('#modalOnboarding');
-  const modalMini = qs('#modalMini');
-  const miniTitle = qs('#miniTitle');
-  const miniSections = {tablet:qs('#mini-tablet'), board:qs('#mini-board'), ball:qs('#mini-ball'), friends:qs('#mini-friends')};
-  const btnCloseMini = qs('#btnCloseMini');
-  const modalEnd = qs('#modalEnd');
-  const endMsg = qs('#endMsg');
-  const endStats = qs('#endStats');
-  const endTip = qs('#endTip');
-  const btnRetry = qs('#btnRetry');
-  const btnContinue = qs('#btnContinue');
-  const btnOk = qs('#btnOk');
+    <!-- Modal de mini-juegos -->
+    <div id="minigame-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3 id="minigame-title">Mini-juego</h3>
+            <div id="minigame-content" class="minigame-content"></div>
+            <button id="minigame-close" class="btn btn--secondary">Salir del Mini-juego</button>
+        </div>
+    </div>
 
-  // POIs
-  const poiTablet = qs('#poi-tablet');
-  const poiDecor = qs('#poi-decor');
-  const poiBoard = qs('#poi-boardgame');
-  const npcFamily = qs('#npc-family');
-  const poiBall = qs('#poi-ball');
-  const poiFriends = qs('#poi-friends');
+    <!-- Modal de fin de día -->
+    <div id="endday-modal" class="modal hidden">
+        <div class="modal-content">
+            <div id="endday-character" class="guide-character">🤖</div>
+            <h2 id="endday-title">Fin del Día</h2>
+            <div id="endday-results" class="endday-results"></div>
+            <p id="endday-message">Mensaje del día</p>
+            <div class="endday-buttons">
+                <button id="endday-retry" class="btn btn--primary">Reintentar</button>
+                <button id="endday-continue" class="btn btn--secondary">Continuar</button>
+            </div>
+        </div>
+    </div>
 
-  // Minijuegos DOM
-  const memoryGrid = qs('#memoryGrid');
-  const memoTime = qs('#memotime');
-  const diceEl = qs('#dice');
-  const btnRoll = qs('#btnRoll');
-  const timingBar = qs('#timingBar');
-  const timingCursor = qs('#timingCursor');
-  const btnKick = qs('#btnKick');
-  const padA = qs('#padA');
-  const padL = qs('#padL');
-  const coopScoreEl = qs('#coopScore');
+    <!-- Modal de ayuda -->
+    <div id="help-modal" class="modal hidden">
+        <div class="modal-content">
+            <h2>Controles y Ayuda</h2>
+            <div class="help-content">
+                <h3>🎮 Controles:</h3>
+                <p><strong>PC:</strong> Usa las teclas WASD o flechas direccionales</p>
+                <p><strong>Cruceta:</strong> Usa los botones direccionales en la esquina inferior izquierda</p>
+                
+                <h3>🎯 Objetivo:</h3>
+                <p>Mantén tus medidores ⚡ Energía Física y ❤️ Conexión Social en zona verde (≥70%) al final del día</p>
+                
+                <h3>🎮 Cómo Jugar:</h3>
+                <p>Acércate a los objetos con tu avatar. Cuando estés cerca aparecerá un botón "🎮 Jugar..."</p>
+                
+                <h3>🏠 Objetos Interactivos:</h3>
+                <p><strong>📱 Celular:</strong> Juego Snake (sube 🧠, baja ⚡❤️)</p>
+                <p><strong>🎲 Mesa:</strong> Tic-Tac-Toe (sube ❤️)</p>
+                <p><strong>⚽ Balón:</strong> Penales (sube ⚡)</p>
+                <p><strong>👫 Amigos:</strong> Piedra/Papel/Tijera (sube ⚡❤️)</p>
+            </div>
+            <button id="help-close" class="btn btn--primary">Cerrar</button>
+        </div>
+    </div>
 
-  // =============================
-  // [JS/INIT] Estado global & guardado
-  // =============================
-  const save = {
-    best: JSON.parse(localStorage.getItem('mdsp_best')||'null'),
-    unlocked: JSON.parse(localStorage.getItem('mdsp_unlocked')||'[]'),
-    decor: JSON.parse(localStorage.getItem('mdsp_decor')||'{"wall":"#16214e","shirt":"#4ade80"}'),
-    volume: JSON.parse(localStorage.getItem('mdsp_vol')||'1'),
-    reduce: JSON.parse(localStorage.getItem('mdsp_reduce')||String(CONST.EFFECTS_ENABLED_DEFAULT)),
-    points: JSON.parse(localStorage.getItem('mdsp_pts')||'0')
-  };
+    <!-- Panel de debug (oculto por defecto) -->
+    <div id="debug-panel" class="debug-panel hidden">
+        <h4>Panel Debug (Tecla D)</h4>
+        <div id="debug-info"></div>
+        <div id="proximity-debug"></div>
+    </div>
 
-  function persist(){
-    localStorage.setItem('mdsp_best',JSON.stringify(save.best));
-    localStorage.setItem('mdsp_unlocked',JSON.stringify(save.unlocked));
-    localStorage.setItem('mdsp_decor',JSON.stringify(save.decor));
-    localStorage.setItem('mdsp_vol',JSON.stringify(save.volume));
-    localStorage.setItem('mdsp_reduce',JSON.stringify(save.reduce));
-    localStorage.setItem('mdsp_pts',JSON.stringify(save.points));
-  }
+    <!-- Notificaciones flotantes -->
+    <div id="notifications" class="notifications"></div>
 
-  const state = {
-    running: true,
-    reduced: !!save.reduce,
-    muted: false,
-    t: 0, // tiempo total transcurrido (s)
-    dayT: 0, // progreso del día 0..1
-    pos: {x: window.innerWidth*0.5, y: window.innerHeight*0.7},
-    vel: {x:0,y:0},
-    zone: 'room',
-    energy: 0.8, // 0..1
-    heart: 0.8,
-    fun: 0.1,
-    activity: null, // 'tablet' | 'board' | 'ball' | 'friends'
-    announcing: false,
-    fps: 60,
-    last: performance.now(),
-    npcs: {family:false, friends:false},
-    goalBanner: 0, // anim banner
-  };
-
-  // Aplicar decoración guardada (pared cuarto)
-  zones.room.querySelector('.parallax').style.background = `linear-gradient(180deg, ${save.decor.wall}, #0e1430)`;
-
-  // =============================
-  // [JS/AUDIO] WebAudio y Voz
-  // =============================
-  const AudioCtx = window.AudioContext||window.webkitAudioContext;
-  const actx = new AudioCtx();
-  const master = actx.createGain(); master.gain.value = save.volume; master.connect(actx.destination);
-  function beep(freq=440, dur=0.12, type='sine', vol=0.3){
-    if(state.muted) return; const o=actx.createOscillator(); const g=actx.createGain();
-    o.type=type; o.frequency.value=freq; g.gain.value=vol; o.connect(g); g.connect(master); o.start(); g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime+dur); o.stop(actx.currentTime+dur);
-  }
-  const sfx = {
-    powerUp(){beep(880,0.12,'sine',0.25);},
-    drain(){beep(200,0.18,'sawtooth',0.2);},
-    success(){beep(660,0.15,'triangle',0.22); setTimeout(()=>beep(880,0.15,'triangle',0.22),120)},
-    button(){beep(520,0.1,'sine',0.18)},
-  };
-  function speak(text){
-    if(!window.speechSynthesis) return; const u=new SpeechSynthesisUtterance(text); u.lang='es-MX'; u.rate=1.02; u.pitch=1.1; u.volume = state.muted?0:1; window.speechSynthesis.cancel(); window.speechSynthesis.speak(u);
-  }
-
-  // =============================
-  // [JS/INPUT] Keyboard + Joystick
-  // =============================
-  const keys = new Set();
-  window.addEventListener('keydown',e=>{ if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','w','a','s','d','W','A','S','D'].includes(e.key)){ keys.add(e.key.toLowerCase()); }
-    if(e.key==='p' || e.key==='P'){ togglePause(); }
-    if(e.key==='d' || e.key==='D'){ toggleDebug(); }
-  });
-  window.addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));
-
-  // Joystick virtual (arrastre dentro del círculo)
-  let stickActive=false, stickVec={x:0,y:0};
-  function stickPos(e){
-    const r = stick.getBoundingClientRect();
-    const cx = r.left + r.width/2; const cy = r.top + r.height/2;
-    const p = (e.touches? e.touches[0]: e);
-    const dx = p.clientX - cx; const dy = p.clientY - cy;
-    const rad = r.width/2 - 10; // margen
-    const len = Math.hypot(dx,dy); const m = Math.min(1, len/rad);
-    const nx = (dx/ (len||1)) * m; const ny = (dy/(len||1)) * m;
-    knob.style.transform = `translate(${nx*rad}px, ${ny*rad}px)`;
-    stickVec = {x:nx, y:ny};
-  }
-  const stickEv = {
-    start(e){ stickActive=true; stick.classList.add('active'); stickPos(e); e.preventDefault(); },
-    move(e){ if(!stickActive) return; stickPos(e); e.preventDefault(); },
-    end(){ stickActive=false; stickVec={x:0,y:0}; knob.style.transform='translate(0,0)'; }
-  };
-  ['mousedown','touchstart'].forEach(t=>stick.addEventListener(t, stickEv.start, {passive:false}));
-  ['mousemove','touchmove'].forEach(t=>window.addEventListener(t, stickEv.move, {passive:false}));
-  ['mouseup','mouseleave','touchend','touchcancel'].forEach(t=>window.addEventListener(t, stickEv.end));
-
-  // =============================
-  // [JS/WORLD] Zonas, POIs, transición
-  // =============================
-  function setZone(z){
-    for(const k in zones){ zones[k].classList.toggle('active', k===z); }
-    state.zone = z;
-  }
-  // Transición simple por posición avatar (bordes cambian de zona)
-  function checkZoneChange(){
-    const w = window.innerWidth, h = window.innerHeight;
-    if(state.zone==='room' && state.pos.x < w*0.2) setZone('living');
-    if(state.zone==='living' && state.pos.x > w*0.8) setZone('garden');
-    if(state.zone==='living' && state.pos.x < w*0.2) setZone('room');
-    if(state.zone==='garden' && state.pos.x < w*0.2) setZone('living');
-  }
-
-  // NPCs aparecen por intervalos
-  setInterval(()=>{ state.npcs.family = Math.random()>0.4; npcFamily.style.display = state.npcs.family? 'flex':'none'; }, 6000);
-  setInterval(()=>{ state.npcs.friends = Math.random()>0.5; poiFriends.classList.toggle('highlight', state.npcs.friends); }, 6000);
-
-  // Interacciones POIs
-  poiTablet.addEventListener('click',()=>openMini('tablet'));
-  poiTablet.addEventListener('keydown',e=>{ if(e.key==='Enter' || e.key===' '){openMini('tablet');} });
-  poiDecor.addEventListener('click',()=>openDecor());
-  poiDecor.addEventListener('keydown',e=>{ if(e.key==='Enter' || e.key===' '){openDecor();} });
-  poiBoard.addEventListener('click',()=>{ if(state.npcs.family) openMini('board'); else pulse(poiBoard); });
-  poiBoard.addEventListener('keydown',e=>{ if((e.key==='Enter'||e.key===' ') && state.npcs.family) openMini('board'); });
-  poiBall.addEventListener('click',()=>openMini('ball'));
-  poiBall.addEventListener('keydown',e=>{ if(e.key==='Enter' || e.key===' '){openMini('ball');} });
-  poiFriends.addEventListener('click',()=>{ if(state.npcs.friends) openMini('friends'); else pulse(poiFriends); });
-  poiFriends.addEventListener('keydown',e=>{ if((e.key==='Enter'||e.key===' ') && state.npcs.friends) openMini('friends'); });
-
-  function pulse(el){ el.animate([{transform:'scale(1)'},{transform:'scale(1.08)'},{transform:'scale(1)'}],{duration:500}); }
-
-  // =============================
-  // [JS/UI] HUD, botones, voz, efectos
-  // =============================
-  function setBar(el, value){ el.style.transform = `scaleX(${Math.max(0,Math.min(1,value))})`; }
-  function flashBar(bar){ if(state.reduced) return; bar.classList.remove('flash'); void bar.offsetWidth; bar.classList.add('flash'); }
-  function redBar(bar, on){ bar.classList.toggle('red', !!on); }
-  function updateBars(){
-    setBar(hudEnergy, state.energy);
-    setBar(hudHeart, state.heart);
-    setBar(hudFun, state.fun);
-    redBar(barEnergy, state.energy < CONST.RED_THR);
-    redBar(barHeart, state.heart < CONST.RED_THR);
-  }
-  function updateClock(){
-    const track = qs('.clock .track'); const r = track.getBoundingClientRect();
-    sun.style.left = (state.dayT * (r.width-22)) + 'px';
-  }
-
-  // Botones generales
-  btnPause.addEventListener('click',()=>{ sfx.button(); togglePause(); });
-  btnRestart.addEventListener('click',()=>{ sfx.button(); restart(); });
-  btnMute.addEventListener('click',()=>{ sfx.button(); state.muted = !state.muted; btnMute.textContent = state.muted? '🔇 Silencio' : '🔊 Sonido'; persist(); });
-  btnReduce.addEventListener('click',()=>{ sfx.button(); state.reduced = !state.reduced; btnReduce.textContent = `✨ Efectos: ${state.reduced? 'OFF':'ON'}`; save.reduce = state.reduced; persist(); });
-  btnCredits.addEventListener('click',()=>{ sfx.button(); show(modalCredits,true);});
-  btnCloseCredits.addEventListener('click',()=>{ sfx.button(); show(modalCredits,false);});
-
-  // Onboarding
-  function startOnboarding(){
-    show(modalOnboarding,true);
-    speak('Hola, soy tu Guía del Balance. La energía física se llena con movimiento y aire fresco. La conexión social se llena cuando compartes y ríes en persona. Tu misión hoy: explora casa y jardín y mantén ambos medidores en verde antes de que se ponga el sol.');
-  }
-  btnOk.addEventListener('click',()=>{ sfx.button(); show(modalOnboarding,false); state.running=true; });
-
-  // Mostrar/Ocultar modal genérico
-  function show(modal, on){ modal.classList.toggle('show', !!on); state.running = !on; }
-
-  // =============================
-  // [JS/MINIGAMES] Implementaciones
-  // =============================
-  let memoTimerId=null, memoTimeLeft=20, memoFirst=null, memoLocked=false, memoPairs=0;
-  function openMini(kind){
-    state.activity = kind; for(const k in miniSections){ miniSections[k].classList.remove('active'); }
-    miniTitle.textContent = {
-      tablet:'Tablet — Empareja iconos', board:'Juego de Mesa — Dado en familia', ball:'Pelota — Timing', friends:'Amigos — Cooperación'
-    }[kind]||'Minijuego';
-    miniSections[kind].classList.add('active');
-    show(modalMini,true);
-
-    // Efectos al entrar
-    if(kind==='tablet'){ setupMemory(); speak('Modo Tablet. Recuerda: mucha pantalla baja tu energía y conexión.'); }
-    if(kind==='board'){ diceEl.textContent='—'; speak('Juego de mesa en familia. ¡Lanza el dado!'); }
-    if(kind==='ball'){ timingPhase=0; speak('Pelota contra la pared. Patea cuando el cursor pase por la zona verde.'); }
-    if(kind==='friends'){ coopScore=0; coopScoreEl.textContent='0'; speak('¡Juega con tus amigos! Alterna A y L o toca los botones.'); }
-  }
-  btnCloseMini.addEventListener('click',()=>{ sfx.button(); endActivity(); show(modalMini,false); });
-
-  function endActivity(){
-    // Al cerrar, la actividad deja de aplicar efectos continuos (tablet aplica dentro del minijuego)
-    state.activity=null; clearInterval(memoTimerId); memoTimerId=null;
-  }
-
-  // --- Tablet: memoria (15–20s) ---
-  const memoryIcons = ['🍎','🍌','🍇','🍉','🎈','🚲','🎮','📚'];
-  function setupMemory(){
-    const icons = [...memoryIcons, ...memoryIcons].sort(()=>Math.random()-0.5);
-    memoryGrid.innerHTML=''; memoTimeLeft = 20; memoPairs=0; memoFirst=null; memoLocked=false; memoTime.textContent = memoTimeLeft;
-    icons.forEach((ic,i)=>{
-      const t=document.createElement('button'); t.className='tile'; t.setAttribute('aria-label','Carta'); t.dataset.icon=ic; t.textContent='?';
-      t.addEventListener('click',()=>memoryClick(t)); memoryGrid.appendChild(t);
-    });
-    if(memoTimerId) clearInterval(memoTimerId);
-    memoTimerId = setInterval(()=>{
-      memoTimeLeft--; memoTime.textContent = memoTimeLeft;
-      // Efecto de decaimiento continuo mientras se juega (pantalla):
-      applyChange('heart', -CONST.DECAY_HEART_TABLET);
-      applyChange('energy', -CONST.DECAY_ENERGY_TABLET);
-      if(memoTimeLeft<=0){ clearInterval(memoTimerId); memoTimerId=null; speak('¡Tiempo!'); }
-    },1000);
-  }
-  function memoryClick(tile){
-    if(memoLocked || tile.classList.contains('matched')) return;
-    tile.classList.add('revealed'); tile.textContent=tile.dataset.icon;
-    if(!memoFirst){ memoFirst = tile; return; }
-    memoLocked=true;
-    if(tile.dataset.icon===memoFirst.dataset.icon){
-      // Match
-      setTimeout(()=>{
-        tile.classList.add('matched'); memoFirst.classList.add('matched');
-        memoPairs++; sfx.powerUp(); flashBar(funBar); state.fun = Math.min(1, state.fun + 0.04);
-        memoFirst=null; memoLocked=false; if(memoPairs===memoryIcons.length){
-          // Puzzle completo → bonus diversión
-          state.fun = Math.min(1, state.fun + CONST.FUN_GAIN_TABLET);
-          sfx.success(); speak('Puzzle completado. ¡Diversión mental cargada!');
-        }
-      },200);
-    } else {
-      // No match
-      setTimeout(()=>{ tile.classList.remove('revealed'); tile.textContent='?'; memoFirst.classList.remove('revealed'); memoFirst.textContent='?'; memoFirst=null; memoLocked=false; sfx.drain(); },450);
-    }
-  }
-
-  // --- Dado familiar ---
-  btnRoll.addEventListener('click',()=>{
-    const n = 1+Math.floor(Math.random()*6); diceEl.textContent=String(n); sfx.button();
-    if(n>=4){
-      // Ráfaga de ❤️
-      applyChange('heart', CONST.GAIN_HEART_BOARDGAME*1.6, true);
-      speak('¡Conexión poderosa! ¡Tu corazón brilla!');
-    }
-  });
-
-  // --- Pelota (timing) ---
-  let timingPhase=0, timingX=0, timingDir=1;
-  function timingUpdate(dt){
-    // mover cursor
-    timingX += dt * 240 * timingDir; // px/s
-    const w = timingBar.clientWidth - 14; if(timingX<=0){timingX=0; timingDir=1} if(timingX>=w){timingX=w; timingDir=-1}
-    timingCursor.style.left = timingX+'px';
-  }
-  btnKick.addEventListener('click',()=>{
-    // ¿Está dentro de la zona dulce? (34%..66%)
-    const w = timingBar.clientWidth - 14; const t = timingX / w; const good = t>0.34 && t<0.66;
-    if(good){ applyChange('energy', CONST.GAIN_ENERGY_BALL*1.4, true); speak('¡Siente la energía! ¡Tu cuerpo se recarga!'); sfx.success(); }
-    else { sfx.drain(); }
-  });
-
-  // --- Amigos (alternado) ---
-  let coopScore=0, lastKey=null;
-  function coopPress(which){
-    if(lastKey===which) { sfx.drain(); return; }
-    lastKey=which; coopScore++; coopScoreEl.textContent=String(coopScore);
-    // Ganancia combinada rápida
-    applyChange('energy', CONST.GAIN_BOTH_FRIENDS*0.8, true);
-    applyChange('heart', CONST.GAIN_BOTH_FRIENDS*0.8, true);
-    if(coopScore>=20){ sfx.success(); speak('¡Equipo perfecto! Ambos poderes suben a la vez.'); }
-  }
-  padA.addEventListener('click',()=>coopPress('A'));
-  padL.addEventListener('click',()=>coopPress('L'));
-  window.addEventListener('keydown',e=>{ if(modalMini.classList.contains('show') && miniSections.friends.classList.contains('active')){
-    if(e.key==='a' || e.key==='A') coopPress('A');
-    if(e.key==='l' || e.key==='L') coopPress('L');
-  }});
-
-  // =============================
-  // [JS/LOOP] Bucle principal
-  // =============================
-  function loop(now){
-    const dt = Math.min(0.05, (now - state.last)/1000); state.last = now; // clamp dt 50ms
-    // FPS aprox
-    state.fps = 1/dt;
-
-    if(state.running){
-      // Progreso del día
-      state.t += dt; state.dayT = Math.min(1, state.t / CONST.DAY_SECONDS); updateClock();
-
-      // Movimiento
-      const ax = (keys.has('arrowright')||keys.has('d')||stickActive? stickVec.x:0) - (keys.has('arrowleft')||keys.has('a')?1:0);
-      const ay = (keys.has('arrowdown')||keys.has('s')||stickActive? stickVec.y:0) - (keys.has('arrowup')||keys.has('w')?1:0);
-      let spd = CONST.SPEED_BASE * (state.energy < CONST.RED_THR ? CONST.SPEED_LOW_MULT : 1);
-      state.pos.x += ax * spd * dt; state.pos.y += ay * spd * dt;
-      // Limites
-      state.pos.x = Math.max(40, Math.min(window.innerWidth-40, state.pos.x));
-      state.pos.y = Math.max(120, Math.min(window.innerHeight-60, state.pos.y));
-      avatar.style.left = state.pos.x + 'px'; avatar.style.top = state.pos.y + 'px';
-
-      // Mundo efectos según medidores bajos
-      document.body.style.filter = `saturate(${Math.max(0.6, state.heart*1.1)})`;
-
-      // Actividad continua (solo Tablet dentro del minijuego ya aplica decaimiento)
-      if(state.activity==='board'){ /* estable */ }
-      if(state.activity==='ball'){ /* ganancias por click, no continuo */ }
-      if(state.activity==='friends'){ /* ganancias por alternado, no continuo */ }
-
-      // Feedback de estado bajo (voz única)
-      if(state.energy < CONST.RED_THR*0.95 && !state.energyWarn){ state.energyWarn=true; speak('¡Alerta! Tu energía física está bajando. ¡Necesitas moverte!'); }
-      if(state.heart < CONST.RED_THR*0.95 && !state.heartWarn){ state.heartWarn=true; speak('¡Alerta! Tu poder de conexión se debilita. ¡Busca a tu familia o amigos!'); }
-
-      // Transición entre zonas
-      checkZoneChange();
-
-      // Fin del día
-      if(state.dayT>=1){ endDay(); }
-    }
-
-    // Minijuego tiempo real
-    if(modalMini.classList.contains('show') && miniSections.ball.classList.contains('active')){
-      timingUpdate(dt);
-    }
-
-    requestAnimationFrame(loop);
-  }
-  requestAnimationFrame(time=>{ state.last=time; loop(time); });
-
-  // =============================
-  // [JS/MECHANICS] Ganancias/Pérdidas
-  // =============================
-  function applyChange(which, perSec, positive=false){
-    const dt = 1; // aplicamos por evento/segundo
-    state[which] = Math.max(0, Math.min(1, state[which] + perSec*dt));
-    updateBars();
-    // Feedback audiovisual
-    if(perSec>0){
-      if(which==='energy'){ sfx.powerUp(); flashBar(barEnergy); if(!state.reduced) banner('¡Mente, cuerpo y corazón, la triple energía de un campeón!', 0.6); }
-      if(which==='heart'){ sfx.powerUp(); flashBar(barHeart); if(!state.reduced) banner('¡Mente, cuerpo y corazón, la triple energía de un campeón!', 0.6); }
-    } else {
-      sfx.drain();
-    }
-  }
-
-  // Banner de poder temporal
-  function banner(text, sec=1.2){ if(state.reduced) return; const b=document.createElement('div'); b.textContent=text; b.style.position='absolute'; b.style.left='50%'; b.style.top='18%'; b.style.transform='translate(-50%,-50%)'; b.style.padding='10px 14px'; b.style.background='#0f1b3f'; b.style.border='2px solid #2e46a6'; b.style.borderRadius='12px'; b.style.boxShadow='var(--shadow)'; b.style.opacity='0.98'; b.style.zIndex=9999; document.body.appendChild(b); setTimeout(()=>b.remove(), sec*1000); }
-
-  // =============================
-  // [JS/END] Fin del día, resumen, progresión
-  // =============================
-  function endDay(){
-    state.running=false;
-    const win = state.energy>=CONST.GREEN_THR && state.heart>=CONST.GREEN_THR;
-    let msg='';
-    if(win){
-      aura.hidden=false; sfx.success(); speak('¡Lo lograste! Eres un Héroe del Bienestar.'); msg='🏆 Victoria: ¡Balance logrado!';
-      save.points += 5; // puntos para personalización
-      // Desbloquear lugares futuros (simulado)
-      if(!save.unlocked.includes('parque')) save.unlocked.push('parque');
-    } else {
-      aura.hidden=true; if(state.energy<CONST.RED_THR){ msg='😴 Estabas con poca energía. Dormiste temprano.'; }
-      if(state.heart<CONST.RED_THR){ msg += (msg?' ':'')+'😔 Te sentiste solo con la tablet.'; }
-      speak('Hoy aprendiste algo importante. ¡Mañana podrás practicar y equilibrarte!');
-    }
-    const eP = Math.round(state.energy*100), hP=Math.round(state.heart*100);
-    endMsg.textContent = msg;
-    endStats.textContent = `Día completado: Energía Física final: ${eP}% | Conexión Social final: ${hP}%.`;
-    endTip.textContent = tipDynamic();
-    show(modalEnd,true);
-
-    // Guardar mejor resultado
-    if(!save.best || (eP+hP) > (save.best.energy+save.best.heart)){
-      save.best = {energy:eP, heart:hP, at: Date.now()};
-    }
-    persist();
-  }
-  btnRetry.addEventListener('click',()=>{ sfx.button(); show(modalEnd,false); restart(); });
-  btnContinue.addEventListener('click',()=>{ sfx.button(); show(modalEnd,false); restart(false); });
-
-  function restart(full=true){
-    aura.hidden=true; state.t=0; state.dayT=0; state.energy=0.8; state.heart=0.8; state.fun=0.1; state.energyWarn=false; state.heartWarn=false; updateBars(); updateClock();
-    if(full){ setZone('room'); state.pos.x=window.innerWidth*0.5; state.pos.y=window.innerHeight*0.7; }
-    state.running=true; speak('Nuevo día. ¡Equilibra tus poderes!');
-  }
-
-  function tipDynamic(){
-    const tips = [
-      'Descubriste que jugar con amigos en el jardín recarga ambos poderes a la vez.',
-      'Los juegos de mesa en familia suben tu conexión social rápidamente.',
-      'Usar la tablet es divertido, pero baja tu energía y conexión si te excedes.',
-      'Mover tu cuerpo con la pelota recarga tu energía física muy rápido.'
-    ];
-    return tips[Math.floor(Math.random()*tips.length)];
-  }
-
-  // =============================
-  // [JS/DECOR] Personalización simple
-  // =============================
-  function openDecor(){
-    const colors=['#16214e','#1f1d5a','#1c2a76','#10325d','#1d3b57','#2a245f'];
-    const c = prompt(`Tienes ${save.points} puntos. Cambia color de pared (elige 1-6):\n1) Azul noche\n2) Índigo\n3) Cobalto\n4) Marino\n5) Pizarra\n6) Berenjena`, '1');
-    const idx = Number(c||'1')-1; if(idx>=0&&idx<colors.length){ save.decor.wall=colors[idx]; zones.room.querySelector('.parallax').style.background = `linear-gradient(180deg, ${save.decor.wall}, #0e1430)`; save.points=Math.max(0, save.points-1); persist(); }
-  }
-
-  // =============================
-  // [JS/PAUSE & DEBUG]
-  // =============================
-  function togglePause(){ state.running=!state.running; btnPause.textContent = state.running? '⏸️ Pausa' : '▶️ Continuar'; }
-
-  let debugOn=false; let debugEl=null;
-  function toggleDebug(){ debugOn=!debugOn; if(debugOn){
-      debugEl=document.createElement('div'); debugEl.style.position='fixed'; debugEl.style.right='10px'; debugEl.style.bottom='10px'; debugEl.style.background='#0a122e'; debugEl.style.border='1px solid #24336e'; debugEl.style.borderRadius='10px'; debugEl.style.padding='8px 10px'; debugEl.style.fontSize='12px'; debugEl.style.opacity='.9'; debugEl.style.zIndex=9999; document.body.appendChild(debugEl);
-      updateDebug();
-    } else { debugEl?.remove(); debugEl=null; }
-  }
-  function updateDebug(){ if(!debugEl) return; debugEl.textContent = `FPS:${state.fps|0} | Energy:${(state.energy*100)|0}% Heart:${(state.heart*100)|0}% Fun:${(state.fun*100)|0}% | Zona:${state.zone}`; requestAnimationFrame(updateDebug); }
-
-  // =============================
-  // [JS/START]
-  // =============================
-  updateBars(); updateClock(); startOnboarding();
-
-  // Ajuste al redimensionar
-  window.addEventListener('resize',()=>{ updateClock(); });
-
-  </script>
+    <script src="app.js"></script>
 </body>
 </html>
