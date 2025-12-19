@@ -2,156 +2,585 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mi Día de Súper Poder: Aventura de Balance (Versión Definitiva)</title>
-    <link rel="stylesheet" href="style.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Mi Día de Súper Poder: Aventura de Balance</title>
+    
+    <!-- ESTILOS CSS -->
+    <style>
+        :root {
+            /* Colores del Sistema */
+            --color-primary: #21808d;
+            --color-secondary: #fcfcf9;
+            --color-text: #1f2121;
+            --color-background: #2c3e50;
+            
+            /* Colores del Juego */
+            --game-success: #27AE60;
+            --game-warning: #F39C12;
+            --game-danger: #E74C3C;
+            --game-info: #3498DB;
+
+            /* Medidas */
+            --radius-lg: 12px;
+            --radius-full: 50px;
+        }
+
+        body {
+            margin: 0; padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--color-background);
+            color: var(--color-text);
+            overflow: hidden;
+            touch-action: none;
+            user-select: none;
+        }
+
+        /* --- HUD --- */
+        .hud {
+            position: absolute; top: 0; left: 0; width: 100%;
+            padding: 10px; pointer-events: none;
+            display: flex; justify-content: space-between; align-items: flex-start;
+            z-index: 100; box-sizing: border-box;
+        }
+
+        .meters-container {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 10px; border-radius: var(--radius-lg);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            pointer-events: auto;
+            display: flex; flex-direction: column; gap: 8px; width: 220px;
+        }
+
+        .meter { display: flex; align-items: center; gap: 8px; }
+        .meter-icon { font-size: 1.2rem; width: 25px; text-align: center; }
+        .meter-label { font-size: 0.75rem; font-weight: bold; width: 80px; color: #555; }
+        .meter-value { font-size: 0.75rem; font-weight: bold; margin-left: auto; }
+        
+        .meter-bar {
+            flex-grow: 1; height: 10px; background: #eee;
+            border-radius: 5px; overflow: hidden; border: 1px solid #ccc;
+        }
+
+        .meter-fill { height: 100%; transition: width 0.3s ease; }
+        .energy-fill { background: linear-gradient(90deg, #ff9966, #ff5e62); }
+        .social-fill { background: linear-gradient(90deg, #f1c40f, #f39c12); }
+        .mental-fill { background: linear-gradient(90deg, #56CCF2, #2F80ED); }
+
+        .day-progress-container { margin-top: 5px; text-align: center; }
+        .day-bar { width: 100%; height: 4px; background: #ddd; border-radius: 2px; }
+        .day-fill { height: 100%; background: #2c3e50; width: 0%; transition: width 1s linear; }
+
+        .control-buttons { display: flex; gap: 8px; pointer-events: auto; }
+        .btn {
+            border: none; padding: 8px 12px; border-radius: 8px;
+            cursor: pointer; font-weight: bold; background: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .btn:active { transform: scale(0.95); }
+        .btn--primary { background: var(--color-primary); color: white; }
+        .btn--secondary { background: white; color: #333; }
+
+        /* --- JUEGO --- */
+        .game-area {
+            width: 100vw; height: 100vh;
+            display: flex; justify-content: center; align-items: center;
+            background: #2c3e50;
+        }
+        canvas { background: #fff; box-shadow: 0 0 30px rgba(0,0,0,0.5); max-width: 100%; max-height: 100%; }
+
+        .play-button {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            background: var(--game-success); color: white;
+            padding: 15px 40px; border-radius: var(--radius-full);
+            font-size: 1.5rem; font-weight: bold; cursor: pointer;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3); z-index: 150; pointer-events: auto;
+            border: 4px solid white; animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .play-button:hover { transform: translate(-50%, -55%); background: #27ae60; }
+        .play-button.hidden { display: none; }
+        @keyframes popIn { from { transform: translate(-50%, -50%) scale(0); } to { transform: translate(-50%, -50%) scale(1); } }
+
+        /* --- D-PAD --- */
+        .dpad {
+            position: fixed; bottom: 20px; left: 20px;
+            width: 140px; height: 140px; z-index: 110; pointer-events: auto; opacity: 0.8;
+        }
+        .dpad-btn {
+            position: absolute; width: 45px; height: 45px;
+            background: rgba(255, 255, 255, 0.8);
+            border: 2px solid #555; border-radius: 50%;
+            font-size: 1.5rem; display: flex; justify-content: center; align-items: center;
+            cursor: pointer; user-select: none;
+        }
+        .dpad-btn:active { background: var(--color-primary); color: white; }
+        .dpad-up { top: 0; left: 47.5px; } .dpad-down { bottom: 0; left: 47.5px; }
+        .dpad-left { top: 47.5px; left: 0; } .dpad-right { top: 47.5px; right: 0; }
+
+        /* --- MODALES --- */
+        .modal {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85); display: flex; justify-content: center; align-items: center;
+            z-index: 2000; backdrop-filter: blur(5px);
+        }
+        .modal.hidden { display: none; }
+
+        .modal-content {
+            background: white; padding: 25px; border-radius: 20px; width: 90%; max-width: 500px;
+            text-align: center; position: relative; border: 4px solid var(--color-primary);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        }
+
+        .guide-character { font-size: 4rem; margin-bottom: 10px; animation: float 3s infinite ease-in-out; }
+        @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+
+        /* --- ESTILOS MINIJUEGOS --- */
+        .minigame-content { margin: 20px 0; min-height: 200px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        
+        /* Tic Tac Toe */
+        .tictactoe-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; background: #333; padding: 8px; border-radius: 12px; }
+        .ttt-cell { width: 70px; height: 70px; background: white; font-size: 2.5rem; display: flex; justify-content: center; align-items: center; cursor: pointer; border-radius: 4px; }
+        .ttt-cell:hover { background: #eef; }
+        .ttt-cell.winner { background: var(--game-success); color: white !important; }
+
+        /* Snake Styles */
+        #snake-canvas { background: #000; border: 4px solid #555; border-radius: 4px; }
+        .snake-controls { display: flex; gap: 10px; margin-top: 10px; }
+        .snake-btn { width: 50px; height: 50px; background: #eee; border: 2px solid #ccc; border-radius: 50%; font-size: 1.5rem; cursor: pointer; }
+        .snake-btn:active { background: #ddd; transform: scale(0.95); }
+
+        /* Notifications */
+        .notifications { position: fixed; top: 120px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; gap: 10px; z-index: 3000; pointer-events: none; }
+        .notification { background: rgba(0,0,0,0.8); color: white; padding: 10px 20px; border-radius: 20px; font-weight: bold; animation: fadeUp 0.5s ease-out; }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
 </head>
 <body>
-    <!-- HUD Principal - Siempre visible -->
+
+    <!-- HUD -->
     <div id="hud" class="hud">
-        <!-- Medidores principales -->
         <div class="meters-container">
             <div class="meter">
                 <span class="meter-icon">⚡</span>
-                <div class="meter-bar">
-                    <div id="energy-fill" class="meter-fill energy-fill"></div>
-                </div>
-                <span class="meter-label">Energía Física</span>
+                <div class="meter-bar"><div id="energy-fill" class="meter-fill energy-fill"></div></div>
+                <span class="meter-label">Física</span>
                 <span id="energy-value" class="meter-value">100%</span>
             </div>
-            
             <div class="meter">
                 <span class="meter-icon">❤️</span>
-                <div class="meter-bar">
-                    <div id="social-fill" class="meter-fill social-fill"></div>
-                </div>
-                <span class="meter-label">Conexión Social</span>
+                <div class="meter-bar"><div id="social-fill" class="meter-fill social-fill"></div></div>
+                <span class="meter-label">Social</span>
                 <span id="social-value" class="meter-value">100%</span>
             </div>
-            
             <div class="meter secondary">
                 <span class="meter-icon">🧠</span>
-                <div class="meter-bar">
-                    <div id="mental-fill" class="meter-fill mental-fill"></div>
-                </div>
-                <span class="meter-label">Diversión Mental</span>
+                <div class="meter-bar"><div id="mental-fill" class="meter-fill mental-fill"></div></div>
+                <span class="meter-label">Mental</span>
                 <span id="mental-value" class="meter-value">0%</span>
             </div>
-        </div>
-
-        <!-- Reloj día-noche -->
-        <div class="day-cycle">
-            <div class="day-cycle-container">
-                <div id="day-progress" class="day-progress"></div>
-                <span class="day-icon" id="day-icon">☀️</span>
+            <div class="day-progress-container">
+                <span style="font-size:0.7rem">☀️ Progreso del día</span>
+                <div class="day-bar"><div id="day-progress" class="day-fill"></div></div>
             </div>
-            <span class="day-label">Progreso del Día</span>
         </div>
 
-        <!-- Botones de control -->
         <div class="control-buttons">
-            <button id="pause-btn" class="btn btn--secondary control-btn" title="Pausar/Continuar">⏸️</button>
-            <button id="restart-btn" class="btn btn--secondary control-btn" title="Reiniciar Día">🔄</button>
-            <button id="sound-btn" class="btn btn--secondary control-btn" title="Silenciar Sonido">🔊</button>
-            <button id="help-btn" class="btn btn--secondary control-btn" title="Ayuda">❓</button>
+            <button id="restart-btn" class="btn btn--secondary">🔄 Reiniciar</button>
+            <button id="sound-btn" class="btn btn--secondary">🔊 Audio</button>
+            <button onclick="alert('Usa las flechas para moverte. Acércate a los objetos para jugar.')" class="btn btn--secondary">❓ Ayuda</button>
         </div>
     </div>
 
-    <!-- NUEVO: Botón de Proximidad para Jugar -->
-    <div id="play-button" class="play-button hidden">
-        🎮 Jugar
-    </div>
+    <!-- BOTÓN DE ACCIÓN -->
+    <div id="play-button" class="play-button hidden">🎮 Jugar</div>
 
-    <!-- Área principal del juego -->
+    <!-- ÁREA DE JUEGO -->
     <div id="game-area" class="game-area">
-        <!-- Canvas del juego -->
         <canvas id="game-canvas" width="800" height="600"></canvas>
-        
-        <!-- NUEVA: Cruceta digital en esquina inferior izquierda -->
         <div id="dpad" class="dpad">
-            <button id="dpad-up" class="dpad-btn dpad-up">⬆️</button>
-            <button id="dpad-down" class="dpad-btn dpad-down">⬇️</button>
-            <button id="dpad-left" class="dpad-btn dpad-left">⬅️</button>
-            <button id="dpad-right" class="dpad-btn dpad-right">➡️</button>
+            <div id="dpad-up" class="dpad-btn dpad-up">⬆️</div>
+            <div id="dpad-down" class="dpad-btn dpad-down">⬇️</div>
+            <div id="dpad-left" class="dpad-btn dpad-left">⬅️</div>
+            <div id="dpad-right" class="dpad-btn dpad-right">➡️</div>
         </div>
     </div>
 
-    <!-- Modal de tutorial dinámico -->
+    <!-- MODAL: TUTORIAL -->
     <div id="tutorial-modal" class="modal">
         <div class="modal-content tutorial-content">
             <div class="guide-character">🤖</div>
-            <h2 id="tutorial-title">¡Hola! Soy el Guía del Balance</h2>
-            <p id="tutorial-text">Te voy a enseñar cómo mantener un día equilibrado y divertido.</p>
-            <div class="tutorial-progress">
-                <div id="tutorial-progress-bar" class="tutorial-progress-bar"></div>
-                <span id="tutorial-step">Paso 1 de 8</span>
+            <h2 id="tutorial-title">¡Hola Héroe!</h2>
+            <p id="tutorial-text">Soy tu Guía del Balance.</p>
+            <div style="margin: 15px 0; background: #eee; height: 6px; border-radius: 3px;">
+                <div id="tutorial-bar" style="height:100%; width:0%; background:var(--color-primary); transition:width 0.3s;"></div>
             </div>
-            <div class="tutorial-buttons">
-                <button id="tutorial-skip" class="btn btn--secondary">Saltar Tutorial</button>
-                <button id="tutorial-next" class="btn btn--primary">Siguiente</button>
+            <p id="tutorial-step" style="font-size:0.8rem; color:#666;">Paso 1</p>
+            <div style="display:flex; justify-content:center; gap:10px; margin-top:15px;">
+                <button id="tutorial-skip" class="btn btn--secondary">Saltar</button>
+                <button id="tutorial-next" class="btn btn--primary">Siguiente ➡️</button>
                 <button id="tutorial-start" class="btn btn--primary hidden">¡Comenzar!</button>
             </div>
         </div>
     </div>
 
-    <!-- Modal de mini-juegos -->
+    <!-- MODAL: MINIJUEGOS -->
     <div id="minigame-modal" class="modal hidden">
         <div class="modal-content">
-            <h3 id="minigame-title">Mini-juego</h3>
+            <h3 id="minigame-title">Juego</h3>
             <div id="minigame-content" class="minigame-content"></div>
-            <button id="minigame-close" class="btn btn--secondary">Salir del Mini-juego</button>
+            <button id="minigame-close" class="btn btn--secondary">Salir</button>
         </div>
     </div>
 
-    <!-- Modal de fin de día -->
+    <!-- MODAL: FIN DEL DÍA -->
     <div id="endday-modal" class="modal hidden">
         <div class="modal-content">
-            <div id="endday-character" class="guide-character">🤖</div>
+            <div class="guide-character" id="end-icon">🏆</div>
             <h2 id="endday-title">Fin del Día</h2>
-            <div id="endday-results" class="endday-results"></div>
-            <p id="endday-message">Mensaje del día</p>
-            <div class="endday-buttons">
-                <button id="endday-retry" class="btn btn--primary">Reintentar</button>
-                <button id="endday-continue" class="btn btn--secondary">Continuar</button>
-            </div>
+            <div id="endday-results" style="display:flex; justify-content:center; gap:20px; margin:20px 0;"></div>
+            <p id="endday-message">...</p>
+            <button onclick="location.reload()" class="btn btn--primary">Jugar Otra Vez</button>
         </div>
     </div>
 
-    <!-- Modal de ayuda -->
-    <div id="help-modal" class="modal hidden">
-        <div class="modal-content">
-            <h2>Controles y Ayuda</h2>
-            <div class="help-content">
-                <h3>🎮 Controles:</h3>
-                <p><strong>PC:</strong> Usa las teclas WASD o flechas direccionales</p>
-                <p><strong>Cruceta:</strong> Usa los botones direccionales en la esquina inferior izquierda</p>
-                
-                <h3>🎯 Objetivo:</h3>
-                <p>Mantén tus medidores ⚡ Energía Física y ❤️ Conexión Social en zona verde (≥70%) al final del día</p>
-                
-                <h3>🎮 Cómo Jugar:</h3>
-                <p>Acércate a los objetos con tu avatar. Cuando estés cerca aparecerá un botón "🎮 Jugar..."</p>
-                
-                <h3>🏠 Objetos Interactivos:</h3>
-                <p><strong>📱 Celular:</strong> Juego Snake (sube 🧠, baja ⚡❤️)</p>
-                <p><strong>🎲 Mesa:</strong> Tic-Tac-Toe (sube ❤️)</p>
-                <p><strong>⚽ Balón:</strong> Penales (sube ⚡)</p>
-                <p><strong>👫 Amigos:</strong> Piedra/Papel/Tijera (sube ⚡❤️)</p>
-            </div>
-            <button id="help-close" class="btn btn--primary">Cerrar</button>
-        </div>
-    </div>
-
-    <!-- Panel de debug (oculto por defecto) -->
-    <div id="debug-panel" class="debug-panel hidden">
-        <h4>Panel Debug (Tecla D)</h4>
-        <div id="debug-info"></div>
-        <div id="proximity-debug"></div>
-    </div>
-
-    <!-- Notificaciones flotantes -->
     <div id="notifications" class="notifications"></div>
 
-    <script src="app.js"></script>
+    <!-- SCRIPT -->
+    <script>
+        // CONFIGURACIÓN
+        const CONFIG = { speed: 5, dayDuration: 180, proximityDist: 70 };
+        const STATE = {
+            energy: 100, social: 100, mental: 0, dayProgress: 0,
+            isPaused: true, isPlayingMinigame: false, soundEnabled: true,
+            player: { x: 100, y: 300, radius: 25, color: '#E74C3C' }, interactable: null
+        };
+        const OBJECTS = {
+            tablet: { id: 'tablet', name: 'Tablet', type: 'snake', x: 100, y: 150, icon: '📱', zone: 'room' },
+            board: { id: 'board', name: 'Juego Mesa', type: 'tictactoe', x: 400, y: 300, icon: '🎲', zone: 'living' },
+            ball: { id: 'ball', name: 'Balón', type: 'penalty', x: 670, y: 200, icon: '⚽', zone: 'garden' },
+            friends: { id: 'friends', name: 'Amigos', type: 'rps', x: 700, y: 450, icon: '👫', zone: 'garden' }
+        };
+
+        // AUDIO
+        const AudioSystem = {
+            speak: function(text) {
+                if(!STATE.soundEnabled || !window.speechSynthesis) return;
+                window.speechSynthesis.cancel();
+                const u = new SpeechSynthesisUtterance(text);
+                u.lang = 'es-ES'; u.rate = 1.0; window.speechSynthesis.speak(u);
+            }
+        };
+
+        // INPUT
+        const keys = { w: false, a: false, s: false, d: false };
+        window.addEventListener('keydown', e => {
+            const k = e.key.toLowerCase();
+            if(k==='w' || k==='arrowup') keys.w = true;
+            if(k==='s' || k==='arrowdown') keys.s = true;
+            if(k==='a' || k==='arrowleft') keys.a = true;
+            if(k==='d' || k==='arrowright') keys.d = true;
+        });
+        window.addEventListener('keyup', e => {
+            const k = e.key.toLowerCase();
+            if(k==='w' || k==='arrowup') keys.w = false;
+            if(k==='s' || k==='arrowdown') keys.s = false;
+            if(k==='a' || k==='arrowleft') keys.a = false;
+            if(k==='d' || k==='arrowright') keys.d = false;
+        });
+        ['up','down','left','right'].forEach(dir => {
+            const btn = document.getElementById(`dpad-${dir}`);
+            const map = {up:'w', down:'s', left:'a', right:'d'};
+            const start = (e) => { e.preventDefault(); keys[map[dir]] = true; };
+            const end = (e) => { e.preventDefault(); keys[map[dir]] = false; };
+            btn.addEventListener('touchstart', start); btn.addEventListener('touchend', end);
+            btn.addEventListener('mousedown', start); btn.addEventListener('mouseup', end);
+        });
+
+        // CORE LOOP
+        const canvas = document.getElementById('game-canvas');
+        const ctx = canvas.getContext('2d');
+        function init() { showTutorial(); loop(); }
+        function loop() { update(); render(); requestAnimationFrame(loop); }
+
+        function update() {
+            if(STATE.isPaused) return;
+            if(keys.w && STATE.player.y > 20) STATE.player.y -= CONFIG.speed;
+            if(keys.s && STATE.player.y < 580) STATE.player.y += CONFIG.speed;
+            if(keys.a && STATE.player.x > 20) STATE.player.x -= CONFIG.speed;
+            if(keys.d && STATE.player.x < 780) STATE.player.x += CONFIG.speed;
+            STATE.dayProgress += (100 / (CONFIG.dayDuration * 60));
+            if(STATE.dayProgress >= 100) endDay();
+            STATE.energy -= 0.02; STATE.social -= 0.02;
+            checkProximity(); updateUI();
+        }
+
+        function checkProximity() {
+            let nearest = null; let minDist = CONFIG.proximityDist;
+            Object.values(OBJECTS).forEach(obj => {
+                const dist = Math.hypot(STATE.player.x - obj.x, STATE.player.y - obj.y);
+                if(dist < minDist) nearest = obj;
+            });
+            const btn = document.getElementById('play-button');
+            if(nearest && nearest !== STATE.interactable) {
+                STATE.interactable = nearest; btn.classList.remove('hidden');
+                btn.innerHTML = `🎮 Jugar ${nearest.name}`;
+                btn.onclick = () => startMinigame(nearest);
+            } else if (!nearest) {
+                STATE.interactable = null; btn.classList.add('hidden');
+            }
+        }
+
+        function render() {
+            ctx.clearRect(0,0,800,600);
+            // Fondos
+            ctx.fillStyle = '#D6EAF8'; ctx.fillRect(0,0,266,600);
+            ctx.fillStyle = '#AED6F1'; ctx.fillRect(30,120,200,300); // Alfombra
+            ctx.fillStyle = '#F5CBA7'; ctx.fillRect(266,0,267,600);
+            ctx.strokeStyle = '#E59866'; ctx.lineWidth = 2; // Madera
+            for(let i=0; i<600; i+=40) { ctx.beginPath(); ctx.moveTo(266,i); ctx.lineTo(533,i); ctx.stroke(); }
+            ctx.fillStyle = '#ABEBC6'; ctx.fillRect(533,0,267,600);
+            ctx.fillStyle = '#2ECC71'; ctx.beginPath(); ctx.arc(750,80,60,0,Math.PI*2); ctx.fill(); // Árbol
+            ctx.fillStyle = 'rgba(0,0,0,0.2)'; ctx.font = 'bold 20px Arial';
+            ctx.fillText("CUARTO", 20, 40); ctx.fillText("SALA", 286, 40); ctx.fillText("JARDÍN", 553, 40);
+
+            // Objetos
+            Object.values(OBJECTS).forEach(obj => {
+                ctx.save(); ctx.translate(obj.x, obj.y);
+                ctx.fillStyle = 'rgba(0,0,0,0.2)'; ctx.beginPath(); ctx.ellipse(0,15,20,8,0,0,Math.PI*2); ctx.fill();
+                ctx.font = '35px Arial'; ctx.textAlign='center'; ctx.textBaseline='middle';
+                ctx.fillText(obj.icon, 0,0);
+                if(STATE.interactable === obj) {
+                    ctx.strokeStyle = '#FFD700'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(0,0,30,0,Math.PI*2); ctx.stroke();
+                }
+                ctx.restore();
+            });
+
+            // Jugador
+            const p = STATE.player;
+            ctx.save(); ctx.translate(p.x, p.y);
+            ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(0,0,p.radius,0,Math.PI*2); ctx.fill();
+            ctx.lineWidth=3; ctx.strokeStyle='white'; ctx.stroke();
+            ctx.fillStyle='white'; ctx.beginPath(); ctx.arc(-8,-5,6,0,Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(8,-5,6,0,Math.PI*2); ctx.fill();
+            ctx.fillStyle='black'; ctx.beginPath(); ctx.arc(-8,-5,2,0,Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(8,-5,2,0,Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(0,5,8,0,Math.PI,false); ctx.stroke();
+            ctx.restore();
+        }
+
+        function updateUI() {
+            STATE.energy = Math.max(0, Math.min(100, STATE.energy));
+            STATE.social = Math.max(0, Math.min(100, STATE.social));
+            STATE.mental = Math.max(0, Math.min(100, STATE.mental));
+            document.getElementById('energy-fill').style.width = STATE.energy + '%';
+            document.getElementById('energy-value').innerText = Math.floor(STATE.energy) + '%';
+            document.getElementById('social-fill').style.width = STATE.social + '%';
+            document.getElementById('social-value').innerText = Math.floor(STATE.social) + '%';
+            document.getElementById('mental-fill').style.width = STATE.mental + '%';
+            document.getElementById('mental-value').innerText = Math.floor(STATE.mental) + '%';
+            document.getElementById('day-progress').style.width = STATE.dayProgress + '%';
+        }
+
+        // TUTORIAL
+        const steps = [
+            { t: "¡Hola Héroe! 🤖", m: "Soy tu Guía. Hoy aprenderás a cuidar tu energía." },
+            { t: "Energía Física ⚡", m: "Muévete en el JARDÍN para subir tu energía física." },
+            { t: "Energía Social ❤️", m: "Juega en la SALA o JARDÍN para llenar tu corazón." },
+            { t: "Tu Misión 🎯", m: "Termina el día con ambas barras en VERDE." },
+            { t: "¡A Jugar!", m: "Acércate a los objetos brillantes para jugar." }
+        ];
+        let currStep = 0;
+        function showTutorial() { STATE.isPaused = true; updateTutorial(); }
+        function updateTutorial() {
+            const s = steps[currStep];
+            document.getElementById('tutorial-title').innerText = s.t;
+            document.getElementById('tutorial-text').innerText = s.m;
+            document.getElementById('tutorial-step').innerText = `Paso ${currStep+1}/${steps.length}`;
+            document.getElementById('tutorial-bar').style.width = ((currStep+1)/steps.length)*100+'%';
+            if(currStep>0) AudioSystem.speak(s.m);
+            if(currStep===steps.length-1) {
+                document.getElementById('tutorial-next').classList.add('hidden');
+                document.getElementById('tutorial-start').classList.remove('hidden');
+            }
+        }
+        document.getElementById('tutorial-next').onclick = () => { currStep++; updateTutorial(); };
+        document.getElementById('tutorial-skip').onclick = () => { document.getElementById('tutorial-modal').classList.add('hidden'); STATE.isPaused = false; };
+        document.getElementById('tutorial-start').onclick = () => { document.getElementById('tutorial-modal').classList.add('hidden'); STATE.isPaused = false; AudioSystem.speak("¡Comienza la aventura!"); };
+
+        // MINIJUEGOS MANAGER
+        function startMinigame(obj) {
+            STATE.isPaused = true;
+            document.getElementById('play-button').classList.add('hidden');
+            document.getElementById('minigame-modal').classList.remove('hidden');
+            document.getElementById('minigame-title').innerText = obj.name;
+            const content = document.getElementById('minigame-content');
+            content.innerHTML = '';
+
+            if(obj.type === 'penalty') setupPenalty(content);
+            else if(obj.type === 'tictactoe') setupTicTacToe(content);
+            else if(obj.type === 'snake') setupSnake(content);
+            else content.innerHTML = '<p>Jugando con Amigos...</p><div style="font-size:3rem">👫</div>';
+
+            document.getElementById('minigame-close').onclick = () => endMinigame(obj);
+        }
+
+        function endMinigame(obj) {
+            document.getElementById('minigame-modal').classList.add('hidden');
+            STATE.isPaused = false;
+            // Clean global listeners if any
+            if(obj.type === 'snake') { window.snakeGameOver = true; } // Signal to stop loop
+            
+            // Recompensas
+            if(obj.type === 'penalty') { STATE.energy += 20; AudioSystem.speak("¡Bien hecho!"); }
+            else if(obj.type === 'tictactoe') { STATE.social += 25; AudioSystem.speak("¡Qué divertido!"); }
+            else if(obj.type === 'snake') { STATE.mental += 25; STATE.energy -= 10; AudioSystem.speak("¡Bien pensado!"); }
+            else if(obj.type === 'rps') { STATE.social += 20; STATE.energy += 10; }
+            showNotification(`Actividad con ${obj.name} completada`);
+        }
+
+        // --- SNAKE (IMPLEMENTADO COMPLETO) ---
+        function setupSnake(container) {
+            container.innerHTML = `
+                <div style="text-align:center">
+                    <div style="font-weight:bold; margin-bottom:5px;">Puntos: <span id="snake-score">0</span></div>
+                    <canvas id="snake-canvas" width="300" height="300"></canvas>
+                    <div class="snake-controls">
+                        <button class="snake-btn" id="s-left">⬅️</button>
+                        <button class="snake-btn" id="s-up">⬆️</button>
+                        <button class="snake-btn" id="s-down">⬇️</button>
+                        <button class="snake-btn" id="s-right">➡️</button>
+                    </div>
+                    <p style="font-size:0.8rem; margin-top:5px;">Usa flechas, WASD o botones</p>
+                </div>
+            `;
+            const cvs = document.getElementById('snake-canvas');
+            const ctx = cvs.getContext('2d');
+            const box = 20; // 15x15 grid
+            let snake = [{x: 9*box, y: 10*box}];
+            let food = { x: Math.floor(Math.random()*15)*box, y: Math.floor(Math.random()*15)*box };
+            let score = 0;
+            let d; // direction
+            window.snakeGameOver = false;
+
+            // Control listener
+            const direction = (e) => {
+                let key = e.keyCode;
+                if((key == 37 || key == 65) && d != "RIGHT") d = "LEFT";
+                else if((key == 38 || key == 87) && d != "DOWN") d = "UP";
+                else if((key == 39 || key == 68) && d != "LEFT") d = "RIGHT";
+                else if((key == 40 || key == 83) && d != "UP") d = "DOWN";
+            }
+            document.addEventListener("keydown", direction);
+            
+            // Touch controls
+            document.getElementById('s-left').onclick = () => { if(d!="RIGHT") d="LEFT"; };
+            document.getElementById('s-up').onclick = () => { if(d!="DOWN") d="UP"; };
+            document.getElementById('s-right').onclick = () => { if(d!="LEFT") d="RIGHT"; };
+            document.getElementById('s-down').onclick = () => { if(d!="UP") d="DOWN"; };
+
+            function draw() {
+                if(window.snakeGameOver || !document.getElementById('snake-canvas')) return;
+                
+                // BG
+                ctx.fillStyle = "#222"; ctx.fillRect(0,0,300,300);
+
+                // Snake
+                for(let i=0; i<snake.length; i++) {
+                    ctx.fillStyle = (i == 0) ? "#2ECC71" : "white";
+                    ctx.fillRect(snake[i].x, snake[i].y, box, box);
+                    ctx.strokeStyle = "#222"; ctx.strokeRect(snake[i].x, snake[i].y, box, box);
+                }
+
+                // Food
+                ctx.fillStyle = "#E74C3C"; ctx.fillRect(food.x, food.y, box, box);
+
+                // Logic
+                let snakeX = snake[0].x; let snakeY = snake[0].y;
+
+                if(d == "LEFT") snakeX -= box;
+                if(d == "UP") snakeY -= box;
+                if(d == "RIGHT") snakeX += box;
+                if(d == "DOWN") snakeY += box;
+
+                // Eat
+                if(snakeX == food.x && snakeY == food.y) {
+                    score++; document.getElementById('snake-score').innerText = score;
+                    AudioSystem.speak("Ñam");
+                    food = { x: Math.floor(Math.random()*15)*box, y: Math.floor(Math.random()*15)*box };
+                } else {
+                    if(d) snake.pop(); // Only pop if moving
+                }
+
+                let newHead = { x: snakeX, y: snakeY };
+
+                // Collision
+                function collision(head, array) {
+                    for(let i=0; i<array.length; i++) if(head.x == array[i].x && head.y == array[i].y) return true;
+                    return false;
+                }
+
+                if(snakeX < 0 || snakeX > 280 || snakeY < 0 || snakeY > 280 || collision(newHead, snake)) {
+                    if(d) { // Only die if started moving
+                        window.snakeGameOver = true;
+                        document.removeEventListener("keydown", direction);
+                        AudioSystem.speak("Juego terminado");
+                        // Trigger close
+                        setTimeout(() => { 
+                            const closeBtn = document.getElementById('minigame-close');
+                            if(closeBtn) closeBtn.click();
+                        }, 1000);
+                        return;
+                    }
+                }
+                
+                if(d) snake.unshift(newHead); // Only grow head if moving
+            }
+            let game = setInterval(draw, 150);
+            
+            // Clean interval on close
+            const oldClose = document.getElementById('minigame-close').onclick;
+            document.getElementById('minigame-close').onclick = () => {
+                clearInterval(game);
+                document.removeEventListener("keydown", direction);
+                endMinigame(OBJECTS.tablet);
+            };
+        }
+
+        // --- PENALES ---
+        function setupPenalty(container) {
+            container.innerHTML = `<p>Presiona <b>ESPACIO</b> o haz <b>CLICK</b> cuando la flecha apunte al hueco.</p><div style="position:relative;display:inline-block;"><canvas id="penalty-canvas" width="300" height="250" style="background:#27AE60;border-radius:8px;border:2px solid #fff;"></canvas><div id="penalty-msg" style="position:absolute;top:40%;left:0;width:100%;text-align:center;font-size:2rem;font-weight:bold;color:white;text-shadow:2px 2px 0 #000;display:none;"></div></div>`;
+            const pc=document.getElementById('penalty-canvas'); const ctx=pc.getContext('2d'); const msgEl=document.getElementById('penalty-msg');
+            let ball={x:150,y:220,radius:8,vx:0,vy:0,moving:false}; let goalie={x:150,y:40,width:30,height:10,speed:2,dir:1}; let arrow={angle:-Math.PI/2,swingSpeed:0.04,swingDir:1}; let gameRunning=true; let animationId;
+            function loop(){
+                if(!document.getElementById('penalty-canvas')){cancelAnimationFrame(animationId);return;}
+                ctx.clearRect(0,0,300,250);
+                ctx.fillStyle="rgba(255,255,255,0.2)";ctx.fillRect(75,0,150,60);ctx.fillStyle="white";ctx.fillRect(95,10,5,50);ctx.fillRect(200,10,5,50);ctx.fillRect(95,10,110,5);
+                ctx.fillStyle="#E74C3C";ctx.fillRect(goalie.x,goalie.y,goalie.width,goalie.height);
+                if(gameRunning){goalie.x+=goalie.speed*goalie.dir;if(goalie.x>195||goalie.x<75)goalie.dir*=-1;}
+                if(!ball.moving&&gameRunning){arrow.angle+=arrow.swingSpeed*arrow.swingDir;if(arrow.angle>-0.8||arrow.angle<-2.3)arrow.swingDir*=-1;ctx.save();ctx.translate(ball.x,ball.y);ctx.rotate(arrow.angle);ctx.fillStyle="yellow";ctx.beginPath();ctx.moveTo(0,-5);ctx.lineTo(60,0);ctx.lineTo(0,5);ctx.fill();ctx.restore();}
+                ctx.fillStyle="white";ctx.beginPath();ctx.arc(ball.x,ball.y,ball.radius,0,Math.PI*2);ctx.fill();
+                if(ball.moving){ball.x+=ball.vx;ball.y+=ball.vy;
+                    if(ball.x>goalie.x&&ball.x<goalie.x+goalie.width&&ball.y>goalie.y&&ball.y<goalie.y+goalie.height)endShot(false,"¡ATAJADA!");
+                    else if(ball.y<20&&ball.x>100&&ball.x<200)endShot(true,"¡GOOOL!");
+                    else if(ball.y<0||ball.x<0||ball.x>300)endShot(false,"¡FUERA!");
+                }
+                animationId=requestAnimationFrame(loop);
+            }
+            const shoot=(e)=>{if(e.type==='keydown'&&e.code!=='Space')return;if(ball.moving||!gameRunning)return;ball.moving=true;ball.vx=Math.cos(arrow.angle)*8;ball.vy=Math.sin(arrow.angle)*8;AudioSystem.speak("¡Disparo!");};
+            function endShot(isGoal,text){gameRunning=false;ball.moving=false;msgEl.style.display='block';msgEl.innerText=text;msgEl.style.color=isGoal?'#F1C40f':'#E74C3C';setTimeout(()=>{window.removeEventListener('keydown',shoot);const closeBtn=document.getElementById('minigame-close');if(closeBtn)closeBtn.click();},1500);}
+            window.addEventListener('keydown',shoot);pc.addEventListener('touchstart',shoot);pc.addEventListener('mousedown',shoot);loop();
+        }
+
+        // --- GATO ---
+        function setupTicTacToe(container) {
+            let board=['','','','','','','','','']; let active=true;
+            container.innerHTML=`<p>Tú: ❌ vs Abuela: ⭕</p><h4 id="ttt-status">Tu turno</h4><div class="tictactoe-grid">${board.map((_,i)=>`<div class="ttt-cell" id="cell-${i}"></div>`).join('')}</div>`;
+            const checkWin=()=>{const wins=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];for(let w of wins)if(board[w[0]]&&board[w[0]]===board[w[1]]&&board[w[0]]===board[w[2]])return w;return board.includes('')?null:'T';};
+            const cpu=()=>{if(!active)return;let empty=board.map((v,i)=>v===''?i:null).filter(v=>v!==null);if(empty.length>0){let i=empty[Math.floor(Math.random()*empty.length)];board[i]='O';document.getElementById(`cell-${i}`).innerText='⭕';document.getElementById(`cell-${i}`).style.color='red';let w=checkWin();if(w){active=false;document.getElementById('ttt-status').innerText=w==='T'?"Empate":"¡Gana Abuela!";}else document.getElementById('ttt-status').innerText="Tu turno";}};
+            board.forEach((_,i)=>{document.getElementById(`cell-${i}`).onclick=function(){if(board[i]===''&&active){board[i]='X';this.innerText='❌';this.style.color='blue';let w=checkWin();if(w){active=false;document.getElementById('ttt-status').innerText=w==='T'?"Empate":"¡Ganaste!";}else{document.getElementById('ttt-status').innerText="Pensando...";setTimeout(cpu,500);}}}});
+        }
+
+        function showNotification(msg){const n=document.createElement('div');n.className='notification';n.innerText=msg;document.getElementById('notifications').appendChild(n);setTimeout(()=>n.remove(),2000);}
+        function endDay(){STATE.isPaused=true;document.getElementById('endday-modal').classList.remove('hidden');const success=STATE.energy>60&&STATE.social>60;const title=document.getElementById('endday-title');const msg=document.getElementById('endday-message');const icon=document.getElementById('end-icon');if(success){title.innerText="¡Día Legendario!";title.style.color="var(--game-success)";msg.innerText="¡Increíble! Lograste un balance perfecto.";icon.innerText="🏆";AudioSystem.speak("¡Felicidades!");}else{title.innerText="Casi lo logras";title.style.color="var(--game-warning)";msg.innerText="Revisa tus medidores. ¡Mañana saldrá mejor!";icon.innerText="💪";AudioSystem.speak("Buen intento.");}document.getElementById('endday-results').innerHTML=`<div>⚡ ${Math.floor(STATE.energy)}%</div><div>❤️ ${Math.floor(STATE.social)}%</div>`;}
+        document.getElementById('restart-btn').onclick=()=>location.reload();document.getElementById('sound-btn').onclick=()=>{STATE.soundEnabled=!STATE.soundEnabled;showNotification(STATE.soundEnabled?"Audio ON":"Audio OFF");};window.onload=init;
+    </script>
 </body>
 </html>
